@@ -1,76 +1,67 @@
-// main.ts — news-image-20261122 v2 "THE WORLD — SUNDAY, 22 NOVEMBER 2026"
-// A program that draws one newspaper front page summing up the world's news of
-// Sunday 22 November 2026 and writes it to /output/entry.png (1024x1024 PNG,
-// <= 1 MiB) plus /output/dossier.json. Node 22 stdlib only, no network at run
-// time, fully deterministic: two runs produce byte-identical files.
+// news-image-20261122 v3 — "THE WORLD", Sunday 22 November 2026.
+// A one-image newspaper front page, drawn procedurally with Node 22 stdlib only.
+// No network at run time. Writes /output/entry.png (1024x1024) + /output/dossier.json.
+// Deterministic: same bytes on every run.
 //
-// v2 vs v1: (1) headline/masthead glyphs are now BOLD — each stroke is drawn
-// twice with a horizontal offset on top of a thicker stroke, so text stays
-// readable at ~300 px thumbnail size; (2) the lead globe is bigger (r 82) and
-// drawn as a recognisable Earth — green continents (Americas, Africa,
-// Eurasia, Australia), blue ocean, polar cap, graticule; (3) the redundant
-// second Bahrain missile arc is gone — one arc only; (4) every story is a
-// 22 Nov 2026 event (Kryvyi Rih / Mexico / EU-Indonesia / US stocks are
-// dropped; the Ukraine secondary is now the 22 Nov Dymer drone strike);
-// (5) all three secondary headlines share ONE scale, so none is smaller.
-//
-// FACTS (verified live from reputable sources on 22 Nov 2026; see dossier.json
-// for the source of every fact — no invented numbers, quotes or casualties):
-//  LEAD — COP31, Antalya: talks in a second day of overtime on Sunday, set
-//    to end with no deal; summit president Murat Kurum: no new draft of the
-//    deal; the draft dropped fossil-fuel wording and a proposed $120bn
-//    adaptation-finance target; EU climate chief Wopke Hoekstra: "good deal
-//    or no deal". (Reuters, 21-22 Nov)
-//  BAHRAIN: Iran's IRGC claims missile-and-drone strikes on US positions at
-//    Al-Riffa and Awali bases, saying it hit two Patriot radars; Bahrain says
-//    a civilian industrial facility was hit (fire, no injuries) and its air
-//    defences intercepted other attacks. (Al Jazeera via ANI / Xinhua /
-//    Iran Press, 22 Nov)
-//  CIKANDE, INDONESIA: fire at the PT Fonusa Agung Mulia candy factory broke
-//    out Saturday 17:00; 3 dead, 36 missing, 15 rescued alive (4 injured);
-//    search still under way on Sunday. (AP / Reuters, 22 Nov)
-//  KYIV REGION, UKRAINE: a Russian drone struck a five-storey residential
-//    building in Dymer on Sunday morning; 14 people still missing, 9
-//    evacuated, fire contained. (Reuters, 22 Nov)
-//  IN BRIEF (all 22 Nov) — Nigeria: boat carrying mourners to a funeral
-//    capsized in Bayelsa; death toll 24. (Reuters) / Nepal PM Balendra Shah
-//    arrived in India for a two-day state visit, his first foreign trip as
-//    PM. (IANS) / Cricket: India declared 720/9, leading New Zealand by 352
-//    in the Wellington Test. (ESPNcricinfo) / F1: Verstappen won the Las
-//    Vegas Grand Prix, his third win there. (Reuters) / South Africa: flags
-//    at half-mast from Sunday for Phumzile Mlambo-Ngcuka; state funeral
-//    28 Nov. (SA News) / NATO council to meet Monday over Russian missiles
-//    that landed in Poland. (EU Today)
+// FACTS — every fact below was verified live on 22 Nov 2026 from reputable
+// sources (Reuters, AP, Al Jazeera, Xinhua, IANS, ESPNcricinfo, SA News, EU Today).
+// Nothing here is invented: no made-up numbers, quotes or casualty figures.
+// - LEAD, COP31 Antalya: talks in a second day of overtime, heading for no deal;
+//   COP31 president Murat Kurum: no new draft; draft dropped fossil-fuel wording
+//   and the $120bn adaptation-finance target; EU's Wopke Hoekstra: "good deal or
+//   no deal". (Reuters, 21-22 Nov 2026)
+// - BAHRAIN: IRGC claims missile + drone strikes on US positions at Al-Riffa and
+//   Awali, claims two Patriot radars hit; Bahrain says a civilian industrial
+//   facility was hit and caught fire, air defences intercepted other attacks.
+//   (Al Jazeera via ANI, Xinhua, 22 Nov 2026)
+// - CIKANDE, Indonesia: fire at the PT Fonusa Agung Mulia candy factory, Sat
+//   17:00; 3 dead, 36 missing, 15 rescued (4 injured); search continued Sunday.
+//   (AP, Reuters, 22 Nov 2026)
+// - KYIV REGION: Russian drone hit a five-storey flat block in Dymer, Sunday
+//   morning; 14 missing, 9 evacuated, fire put out. (Reuters, 22 Nov 2026)
+// - BRIEFS (all 22 Nov): Nigeria — boat to a funeral capsized, 24 dead
+//   (Reuters); Nepal PM Balendra Shah arrived in India, first foreign visit
+//   (IANS); cricket — India 720/9, lead New Zealand by 352 (ESPNcricinfo);
+//   F1 — Verstappen won the Las Vegas Grand Prix (Reuters); South Africa —
+//   flags at half-mast from Sunday for Phumzile Mlambo-Ngcuka (SA News);
+//   NATO council to meet Monday over Russian missiles in Poland (EU Today).
 
-import * as fs from "node:fs";
-import * as path from "node:path";
-import * as zlib from "node:zlib";
-
-// ---------------------------------------------------------------- canvas
-const W = 1024;
-const H = 1024;
-const buf = Buffer.alloc(W * H * 3);
+import { deflateSync } from "node:zlib";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 type RGB = [number, number, number];
-const PAPER: RGB = [245, 239, 224];
-const INK: RGB = [25, 23, 19];
-const RED: RGB = [158, 27, 27];
-const TEAL: RGB = [46, 111, 115];
-const OCEAN: RGB = [168, 204, 208];
-const LAND: RGB = [104, 158, 96];
-const LAND_DARK: RGB = [82, 132, 76];
-const OCHRE: RGB = [198, 160, 74];
-const GREY: RGB = [107, 101, 90];
-const SMOKE: RGB = [150, 146, 136];
-const SMOKE_DARK: RGB = [110, 106, 96];
-const ORANGE: RGB = [214, 106, 32];
-const SKY: RGB = [223, 232, 234];
-const DARK: RGB = [43, 52, 54];
+
+const W = 1024;
+const H = 1024;
+const PAPER: RGB = [243, 237, 222];
+const INK: RGB = [28, 24, 19];
+const RED: RGB = [168, 31, 31];
+const GRAY: RGB = [107, 101, 90];
+const OCEAN: RGB = [188, 216, 222];
+const LAND: RGB = [124, 171, 104];
+const LAND_DARK: RGB = [93, 138, 76];
+const GRAT: RGB = [74, 125, 140];
+const CAP: RGB = [238, 244, 242];
+const ORANGE: RGB = [232, 100, 30];
+const AMBER: RGB = [242, 160, 7];
+const SEA: RGB = [47, 125, 122];
+const DARK: RGB = [38, 48, 58];
+const DARK2: RGB = [51, 56, 61];
+const DARK3: RGB = [58, 63, 69];
+const RUBBLE: RGB = [107, 111, 117];
+const SMOKE: RGB = [138, 143, 148];
+const WIN_LIT: RGB = [242, 217, 140];
+const WIN_DARK: RGB = [32, 36, 42];
+const LADDER: RGB = [122, 74, 33];
 const WHITE: RGB = [250, 248, 242];
 
-function px(x: number, y: number, c: RGB): void {
-  const xi = Math.round(x);
-  const yi = Math.round(y);
+const buf = new Uint8Array(W * H * 3);
+
+// ---------------------------------------------------------------- raster ----
+function setPx(x: number, y: number, c: RGB): void {
+  const xi = Math.floor(x);
+  const yi = Math.floor(y);
   if (xi < 0 || yi < 0 || xi >= W || yi >= H) return;
   const i = (yi * W + xi) * 3;
   buf[i] = c[0];
@@ -78,259 +69,480 @@ function px(x: number, y: number, c: RGB): void {
   buf[i + 2] = c[2];
 }
 
-function fillRect(x0: number, y0: number, x1: number, y1: number, c: RGB): void {
-  const a = Math.max(0, Math.floor(x0));
-  const b = Math.max(0, Math.floor(y0));
-  const d = Math.min(W, Math.ceil(x1));
-  const e = Math.min(H, Math.ceil(y1));
-  for (let y = b; y < e; y++) {
-    for (let x = a; x < d; x++) {
-      const i = (y * W + x) * 3;
+function fillRect(x: number, y: number, w: number, h: number, c: RGB): void {
+  const x0 = Math.max(0, Math.floor(x));
+  const y0 = Math.max(0, Math.floor(y));
+  const x1 = Math.min(W, Math.ceil(x + w));
+  const y1 = Math.min(H, Math.ceil(y + h));
+  for (let yy = y0; yy < y1; yy++) {
+    let i = (yy * W + x0) * 3;
+    for (let xx = x0; xx < x1; xx++) {
       buf[i] = c[0];
       buf[i + 1] = c[1];
       buf[i + 2] = c[2];
+      i += 3;
     }
   }
 }
 
-function disc(cx: number, cy: number, r: number, c: RGB): void {
+function fillDisc(cx: number, cy: number, r: number, c: RGB): void {
   const rr = Math.max(0.5, r);
-  const x0 = Math.floor(cx - rr);
-  const x1 = Math.ceil(cx + rr);
-  const y0 = Math.floor(cy - rr);
-  const y1 = Math.ceil(cy + rr);
+  const y0 = Math.max(0, Math.floor(cy - rr));
+  const y1 = Math.min(H - 1, Math.ceil(cy + rr));
   for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const dx = x + 0.5 - cx;
-      const dy = y + 0.5 - cy;
-      if (dx * dx + dy * dy <= rr * rr) px(x, y, c);
+    const dy = y + 0.5 - cy;
+    const dx = Math.sqrt(Math.max(0, rr * rr - dy * dy));
+    const x0 = Math.max(0, Math.ceil(cx - dx));
+    const x1 = Math.min(W - 1, Math.floor(cx + dx));
+    if (x1 >= x0) fillRect(x0, y, x1 - x0 + 1, 1, c);
+  }
+}
+
+interface Clip {
+  cx: number;
+  cy: number;
+  r: number;
+}
+
+function fillPoly(pts: [number, number][], c: RGB, clip?: Clip): void {
+  if (pts.length < 3) return;
+  let minY = Math.floor(Math.min(...pts.map((p) => p[1])));
+  let maxY = Math.ceil(Math.max(...pts.map((p) => p[1])));
+  minY = Math.max(minY, 0);
+  maxY = Math.min(maxY, H - 1);
+  for (let y = minY; y <= maxY; y++) {
+    const yc = y + 0.5;
+    const xs: number[] = [];
+    for (let i = 0; i < pts.length; i++) {
+      const [x1, y1] = pts[i];
+      const [x2, y2] = pts[(i + 1) % pts.length];
+      if ((y1 <= yc && y2 > yc) || (y2 <= yc && y1 > yc)) {
+        xs.push(x1 + ((yc - y1) * (x2 - x1)) / (y2 - y1));
+      }
+    }
+    xs.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      let x0 = Math.ceil(xs[k]);
+      let x1 = Math.floor(xs[k + 1]);
+      if (clip) {
+        const dy = yc - clip.cy;
+        if (Math.abs(dy) > clip.r) continue;
+        const dx = Math.sqrt(clip.r * clip.r - dy * dy);
+        x0 = Math.max(x0, Math.ceil(clip.cx - dx));
+        x1 = Math.min(x1, Math.floor(clip.cx + dx));
+      }
+      if (x1 >= x0) fillRect(x0, y, x1 - x0 + 1, 1, c);
     }
   }
 }
 
 function thickLine(x0: number, y0: number, x1: number, y1: number, w: number, c: RGB): void {
-  const len = Math.hypot(x1 - x0, y1 - y0);
-  const r = Math.max(0.75, w / 2);
-  if (len < 0.001) {
-    disc(x0, y0, r, c);
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len = Math.hypot(dx, dy);
+  if (len < 0.01) {
+    fillDisc(x0, y0, w / 2, c);
     return;
   }
-  const steps = Math.max(1, Math.ceil(len / Math.max(0.6, r * 0.8)));
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    disc(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, r, c);
-  }
+  const nx = (-dy / len) * (w / 2);
+  const ny = (dx / len) * (w / 2);
+  fillPoly(
+    [
+      [x0 + nx, y0 + ny],
+      [x1 + nx, y1 + ny],
+      [x1 - nx, y1 - ny],
+      [x0 - nx, y0 - ny],
+    ],
+    c,
+  );
+  fillDisc(x0, y0, w / 2, c);
+  fillDisc(x1, y1, w / 2, c);
 }
 
-type Pt = [number, number];
-
-function polyline(pts: Pt[], w: number, c: RGB): void {
+function polyline(pts: [number, number][], w: number, c: RGB): void {
   for (let i = 0; i + 1 < pts.length; i++) {
     thickLine(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], w, c);
   }
 }
 
-// Scanline fill for a simple (non self-intersecting) polygon.
-function fillPolygon(pts: Pt[], c: RGB): void {
-  let minY = H;
-  let maxY = -1;
-  for (const p of pts) {
-    minY = Math.min(minY, Math.floor(p[1]));
-    maxY = Math.max(maxY, Math.ceil(p[1]));
-  }
-  minY = Math.max(0, minY);
-  maxY = Math.min(H - 1, maxY);
-  for (let y = minY; y <= maxY; y++) {
-    const xs: number[] = [];
-    for (let i = 0; i < pts.length; i++) {
-      const a = pts[i];
-      const b = pts[(i + 1) % pts.length];
-      if ((a[1] <= y && b[1] > y) || (b[1] <= y && a[1] > y)) {
-        const t = (y + 0.5 - a[1]) / (b[1] - a[1]);
-        xs.push(a[0] + (b[0] - a[0]) * t);
-      }
-    }
-    xs.sort((m, n) => m - n);
-    for (let i = 0; i + 1 < xs.length; i += 2) {
-      const x0 = Math.max(0, Math.ceil(xs[i]));
-      const x1 = Math.min(W - 1, Math.floor(xs[i + 1]));
-      for (let x = x0; x <= x1; x++) px(x, y, c);
-    }
-  }
-}
-
-function ellipse(cx: number, cy: number, rx: number, ry: number, c: RGB): void {
-  const x0 = Math.floor(cx - rx);
-  const x1 = Math.ceil(cx + rx);
-  const y0 = Math.floor(cy - ry);
-  const y1 = Math.ceil(cy + ry);
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const dx = (x + 0.5 - cx) / rx;
-      const dy = (y + 0.5 - cy) / ry;
-      if (dx * dx + dy * dy <= 1) px(x, y, c);
-    }
-  }
-}
-
-// Points along an ellipse arc (angles in radians, y down).
-function arcPoints(cx: number, cy: number, rx: number, ry: number, a0: number, a1: number, n: number): Pt[] {
-  const out: Pt[] = [];
-  for (let i = 0; i <= n; i++) {
-    const a = a0 + ((a1 - a0) * i) / n;
-    out.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]);
-  }
-  return out;
-}
-
-// ---------------------------------------------------------------- stroke font
-// Hand-drawn single-stroke capitals on a 10 x 14 grid (y down, cap top = 0).
-// Format per glyph: strokes separated by "|", points "x,y" separated by spaces.
-// Bold rendering (see drawText) draws every stroke twice with a horizontal
-// offset on top of a thicker stroke, so glyphs read as solid letters.
-const FONT: Record<string, string> = {
-  A: "0,14 5,0 10,14|2.8,8.5 7.2,8.5",
-  B: "0,0 0,14|0,0 6.5,0 9.5,3 6.5,6.5 0,6.5|0,6.5 6.5,6.5 9.5,10.5 6.5,14 0,14",
-  C: "9,2 6,0 2,0 0,3 0,11 2,14 6,14 9,12",
-  D: "0,0 0,14|0,0 6,0 10,4 10,10 6,14 0,14",
-  E: "0,0 0,14|0,0 8,0|0,7 6,7|0,14 8,14",
-  F: "0,0 0,14|0,0 8,0|0,7 6,7",
-  G: "9,2 6,0 2,0 0,3 0,11 2,14 6,14 9,12 9,8 5.5,8",
-  H: "0,0 0,14|10,0 10,14|0,7 10,7",
-  I: "5,0 5,14|2,0 8,0|2,14 8,14",
-  J: "3,0 8,0|8,0 8,11 5,14 2,14 0,11",
-  K: "0,0 0,14|9,0 0,7 9,14",
-  L: "0,0 0,14|0,14 9,14",
-  M: "0,14 0,0 5,9 10,0 10,14",
-  N: "0,14 0,0 10,14 10,0",
-  O: "5,0 2,0 0,3 0,11 2,14 5,14 8,14 10,11 10,3 8,0 5,0",
-  P: "0,0 0,14|0,0 7,0 10,3 7,7 0,7",
-  Q: "5,0 2,0 0,3 0,11 2,14 5,14 8,14 10,11 10,3 8,0 5,0|6,9 10,14",
-  R: "0,0 0,14|0,0 7,0 10,3 7,7 0,7|4.5,7 10,14",
-  S: "9,1 6,0 2,0 0,2 0,5 2,7 5,7 8,7 10,9 10,12 8,14 4,14 1,13",
-  T: "0,0 10,0|5,0 5,14",
-  U: "0,0 0,11 2,14 5,14 8,14 10,11 10,0",
-  V: "0,0 5,14 10,0",
-  W: "0,0 2.5,14 5,5 7.5,14 10,0",
-  X: "0,0 10,14|10,0 0,14",
-  Y: "0,0 5,7 10,0|5,7 5,14",
-  Z: "0,0 10,0 0,14 10,14",
-  "0": "5,0 2,0 0,3 0,11 2,14 5,14 8,14 10,11 10,3 8,0 5,0",
-  "1": "3,2 5,0 5,14|2,14 8,14",
-  "2": "1,3 3,0 7,0 9,3 9,6 0,14 10,14",
-  "3": "1,1 4,0 7,0 10,3 7,7 4,7|7,7 10,10 7,14 4,14 1,13",
-  "4": "8,0 0,10 8,10|8,0 8,14",
-  "5": "9,0 0,0 0,6 7,6 10,9 10,12 7,14 1,14",
-  "6": "9,1 5,0 1,2 0,6 0,11 2,14 6,14 9,11 9,8 6,6 2,6 0,8",
-  "7": "0,0 10,0 5,14",
-  "8": "3,0 7,0 10,3 7,7 3,7 0,3 3,0|3,7 7,7 10,11 7,14 3,14 0,11 3,7",
-  "9": "1,13 5,14 9,12 10,8 10,3 8,0 4,0 1,3 1,6 4,8 8,8 10,6",
-  ".": "5,12.5 5,12.5",
-  ",": "5,12 4,14.5",
-  ":": "5,5 5,5|5,12.5 5,12.5",
-  ";": "5,5 5,5|5,12 4,14.5",
-  "!": "5,0 5,9|5,12.5 5,12.5",
-  "?": "2,1 4,0 7,0 9,2 9,4 7,6 5,7 5,9|5,12.5 5,12.5",
-  "'": "5,0 4,4",
-  "\u2018": "5,0 6,4",
-  "\u2019": "5,0 4,4",
-  '"': "3,0 2.5,4|7,0 6.5,4",
-  "(": "7,0 4,3 4,11 7,14",
-  ")": "3,0 6,3 6,11 3,14",
-  "-": "1,7 9,7",
-  "\u2013": "1,7 9,7",
-  "\u2014": "0,7 10,7",
-  "/": "8,0 2,14",
-  "%": "1,1 3,0 5,1 5,3 3,4 1,3 1,1|5,10 7,9 9,10 9,12 7,13 5,12 5,10|9,0 1,14",
-  "+": "5,3 5,11|1,7 9,7",
-  "=": "1,5 9,5|1,9 9,9",
-  $: "5,-1 5,15|9,1 6,0 2,0 0,2 0,5 2,7 5,7 8,7 10,9 10,12 8,14 4,14 1,13",
-  "&": "8,2 5,0 2,1 1,4 3,7 6,7 9,10 9,13 6,14 3,14 1,12|3,7 9,0",
-  "\u00b7": "5,6 5,6",
-  " ": "",
+// ------------------------------------------------------- stroke bitmap font -
+// Hand-drawn condensed sans on a 6-wide by 9-tall unit grid (y = 0 top).
+// Each glyph: [advance width in units, list of strokes, each a point list].
+// A zero-length stroke draws as a round dot (used for . : ; ! ? and middot).
+type Glyph = [number, number[][][]];
+const GLYPHS: Record<string, Glyph> = {
+  A: [6, [[[0, 9], [3, 0], [6, 9]], [[1.4, 6], [4.6, 6]]]],
+  B: [6, [[[0, 0], [0, 9]], [[0, 0], [3.8, 0], [5.4, 1.4], [5.4, 3.2], [4, 4.5], [0, 4.5]], [[0, 4.5], [4, 4.5], [5.4, 6], [5.4, 7.6], [4, 9], [0, 9]]]],
+  C: [6, [[[5.4, 1.6], [4, 0], [2, 0], [0, 1.6], [0, 7.4], [2, 9], [4, 9], [5.4, 7.4]]]],
+  D: [6, [[[0, 0], [0, 9]], [[0, 0], [3.6, 0], [5.6, 2], [5.6, 7], [3.6, 9], [0, 9]]]],
+  E: [6, [[[0, 0], [0, 9]], [[0, 0], [5.2, 0]], [[0, 4.5], [4.2, 4.5]], [[0, 9], [5.2, 9]]]],
+  F: [6, [[[0, 0], [0, 9]], [[0, 0], [5.2, 0]], [[0, 4.5], [4.2, 4.5]]]],
+  G: [6, [[[5.4, 1.6], [4, 0], [2, 0], [0, 1.6], [0, 7.4], [2, 9], [4, 9], [5.4, 7.4], [5.4, 5], [3, 5]]]],
+  H: [6, [[[0, 0], [0, 9]], [[6, 0], [6, 9]], [[0, 4.5], [6, 4.5]]]],
+  I: [3.4, [[[1.7, 0], [1.7, 9]], [[0, 0], [3.4, 0]], [[0, 9], [3.4, 9]]]],
+  J: [5, [[[1, 0], [4.6, 0]], [[3.4, 0], [3.4, 6.8], [2.2, 9], [0.8, 9], [0, 7.8]]]],
+  K: [6, [[[0, 0], [0, 9]], [[5.6, 0], [0.6, 4.6]], [[1.8, 5.4], [5.6, 9]]]],
+  L: [6, [[[0, 0], [0, 9]], [[0, 9], [5.4, 9]]]],
+  M: [7, [[[0, 9], [0, 0], [3.5, 5.2], [7, 0], [7, 9]]]],
+  N: [6.6, [[[0, 9], [0, 0], [6.6, 9], [6.6, 0]]]],
+  O: [6.4, [[[1.6, 0], [4.8, 0], [6.4, 1.6], [6.4, 7.4], [4.8, 9], [1.6, 9], [0, 7.4], [0, 1.6], [1.6, 0]]]],
+  P: [6, [[[0, 0], [0, 9]], [[0, 0], [4, 0], [5.6, 1.6], [5.6, 3.4], [4, 5], [0, 5]]]],
+  Q: [6.4, [[[1.6, 0], [4.8, 0], [6.4, 1.6], [6.4, 7.4], [4.8, 9], [1.6, 9], [0, 7.4], [0, 1.6], [1.6, 0]], [[3.6, 6.4], [6.6, 9.6]]]],
+  R: [6, [[[0, 0], [0, 9]], [[0, 0], [4, 0], [5.6, 1.6], [5.6, 3.4], [4, 5], [0, 5]], [[2.2, 5], [6, 9]]]],
+  S: [6, [[[5.4, 1.6], [4, 0], [2, 0], [0, 1.6], [0, 3.4], [1.6, 4.5], [4.4, 4.5], [6, 5.6], [6, 7.4], [4, 9], [2, 9], [0, 7.4]]]],
+  T: [6, [[[0, 0], [6, 0]], [[3, 0], [3, 9]]]],
+  U: [6.4, [[[0, 0], [0, 7], [1.6, 9], [4.8, 9], [6.4, 7], [6.4, 0]]]],
+  V: [6.4, [[[0, 0], [3.2, 9], [6.4, 0]]]],
+  W: [8, [[[0, 0], [2, 9], [4, 4.6], [6, 9], [8, 0]]]],
+  X: [6, [[[0, 0], [6, 9]], [[6, 0], [0, 9]]]],
+  Y: [6, [[[0, 0], [3, 4.6], [6, 0]], [[3, 4.6], [3, 9]]]],
+  Z: [6, [[[0, 0], [6, 0], [0, 9], [6, 9]]]],
+  "0": [6.4, [[[1.6, 0], [4.8, 0], [6.4, 1.6], [6.4, 7.4], [4.8, 9], [1.6, 9], [0, 7.4], [0, 1.6], [1.6, 0]], [[1.8, 7], [4.6, 2]]]],
+  "1": [4, [[[2.8, 0], [2.8, 9]], [[1, 2.4], [2.8, 0]], [[0.6, 9], [4, 9]]]],
+  "2": [6, [[[0.4, 1.8], [1.8, 0], [4.4, 0], [6, 1.6], [6, 3.6], [0.4, 9], [6, 9]]]],
+  "3": [6, [[[0.4, 1.6], [1.8, 0], [4.2, 0], [5.8, 1.6], [5.8, 3.4], [4.4, 4.5], [1.2, 4.5]], [[3.4, 4.5], [5, 4.5], [6, 6], [6, 7.4], [4.4, 9], [1.8, 9], [0.4, 7.6]]]],
+  "4": [6, [[[0, 6.2], [4.6, 0], [4.6, 9]], [[0, 6.2], [5.8, 6.2]]]],
+  "5": [6, [[[5.6, 0], [0.4, 0], [0.4, 4], [3.6, 4], [5.6, 5.6], [5.6, 7.4], [4, 9], [1.8, 9], [0.4, 7.6]]]],
+  "6": [6, [[[5.2, 1.4], [3.6, 0], [1.8, 0], [0.4, 1.8], [0.4, 7.2], [1.8, 9], [4.2, 9], [5.8, 7.4], [5.8, 5.6], [4.4, 4.2], [2, 4.2], [0.8, 5.6]]]],
+  "7": [6, [[[0, 0], [6, 0], [2.6, 9]]]],
+  "8": [6.4, [[[1.6, 0], [4.8, 0], [6.4, 1.6], [6.4, 7.4], [4.8, 9], [1.6, 9], [0, 7.4], [0, 1.6], [1.6, 0]], [[0, 4.5], [6.4, 4.5]]]],
+  "9": [6, [[[1, 7.6], [2.4, 9], [4.2, 9], [5.8, 7.2], [5.8, 1.8], [4.2, 0], [1.8, 0], [0.4, 1.8], [0.4, 3.4], [1.8, 4.8], [4.2, 4.8], [5.4, 3.4]]]],
+  " ": [4, []],
+  ".": [3, [[[1.5, 8.2], [1.5, 8.2]]]],
+  ",": [3, [[[1.5, 8.2], [1.5, 8.2]], [[1.6, 8.8], [0.8, 10.2]]]],
+  ":": [3, [[[1.5, 3.4], [1.5, 3.4]], [[1.5, 8.2], [1.5, 8.2]]]],
+  ";": [3, [[[1.5, 3.4], [1.5, 3.4]], [[1.5, 8.2], [1.5, 8.2]], [[1.6, 8.8], [0.8, 10.2]]]],
+  "'": [2.6, [[[1.6, 0], [1, 2.4]]]],
+  '"': [4.6, [[[1.4, 0], [0.9, 2.2]], [[3.4, 0], [2.9, 2.2]]]],
+  "-": [6, [[[0.6, 4.5], [5.4, 4.5]]]],
+  "—": [6, [[[0, 4.5], [6, 4.5]]]],
+  $: [6, [[[5.4, 1.6], [4, 0], [2, 0], [0, 1.6], [0, 3.4], [1.6, 4.5], [4.4, 4.5], [6, 5.6], [6, 7.4], [4, 9], [2, 9], [0, 7.4]], [[3, -1.2], [3, 10.2]]]],
+  "%": [7, [[[1.6, 1.2], [1.6, 1.2]], [[5.4, 7.8], [5.4, 7.8]], [[6, 0.4], [1, 8.6]]]],
+  "/": [5, [[[4.2, 0], [0.8, 9]]]],
+  "(": [3.6, [[[3, 0], [1.2, 2.2], [1.2, 6.8], [3, 9]]]],
+  ")": [3.6, [[[0.6, 0], [2.4, 2.2], [2.4, 6.8], [0.6, 9]]]],
+  "+": [6, [[[3, 2.2], [3, 6.8]], [[0.6, 4.5], [5.4, 4.5]]]],
+  "!": [3, [[[1.5, 0], [1.5, 6.4]], [[1.5, 8.2], [1.5, 8.2]]]],
+  "?": [6, [[[1.2, 2], [2.4, 0], [4, 0], [5.2, 1.6], [5.2, 3.2], [3.6, 4.8], [3, 5.4], [3, 6.6]], [[3, 8.2], [3, 8.2]]]],
+  "·": [3, [[[1.5, 4.4], [1.5, 4.4]]]],
+  "&": [6, [[[4.6, 1.2], [3.2, 0], [1.6, 1], [1.2, 2.8], [3, 4.6], [5.4, 6.2], [5.8, 7.6], [4.4, 9], [2.2, 9], [0.8, 7.6], [2.4, 5.6], [4.6, 3.4]]]],
+  "=": [6, [[[0.6, 3.4], [5.4, 3.4]], [[0.6, 6], [5.4, 6]]]],
 };
-const ADVANCE = 11.5; // grid units per character (incl. gap)
 
-function parseGlyph(g: string): Pt[][] {
-  if (!g) return [];
-  return g.split("|").map((stroke) =>
-    stroke
-      .trim()
-      .split(/\s+/)
-      .map((tok) => {
-        const [x, y] = tok.split(",").map(Number);
-        return [x, y] as Pt;
-      }),
-  );
+interface TextOpts {
+  align?: "left" | "center" | "right";
+  bold?: boolean;
+  tracking?: number;
 }
 
-const GLYPHS: Record<string, Pt[][]> = {};
-for (const k of Object.keys(FONT)) GLYPHS[k] = parseGlyph(FONT[k]);
-
-function measure(text: string, scale: number): number {
-  let w = 0;
-  for (const ch of text) {
-    void ch;
-    w += ADVANCE * scale;
+function textWidth(s: string, capH: number, tracking = 0): number {
+  const u = capH / 9;
+  let units = 0;
+  for (const ch of s) {
+    const g = GLYPHS[ch] ?? GLYPHS[" "];
+    units += g[0] + 1 + tracking;
   }
-  return w - scale * 1.5; // no trailing gap
+  units -= 1 + tracking;
+  return units * u;
 }
 
-// weight 1 = v1 outline look; weight > 1 draws every stroke twice (offset
-// +/-dx/2 horizontally) with a thicker stroke, so glyphs become solid bold.
-function drawText(
-  text: string,
-  x: number,
-  yTop: number,
-  scale: number,
-  c: RGB,
-  align: "left" | "center" | "right" = "left",
-  weight = 1,
-): void {
-  const w = measure(text, scale);
+function drawText(s: string, x: number, yTop: number, capH: number, c: RGB, opts: TextOpts = {}): void {
+  const tracking = opts.tracking ?? 0;
+  const u = capH / 9;
+  const w = textWidth(s, capH, tracking);
   let cx = x;
-  if (align === "center") cx = x - w / 2;
-  if (align === "right") cx = x - w;
-  const strokeW = Math.max(1.5, scale * 1.28 * weight);
-  const dx = weight > 1.05 ? scale * 0.55 : 0;
-  const offsets = dx > 0 ? [-dx / 2, dx / 2] : [0];
-  for (const off of offsets) {
-    let px0 = cx + off;
-    for (const ch of text) {
-      const glyph = GLYPHS[ch.toUpperCase()];
-      if (glyph) {
-        for (const stroke of glyph) {
-          const pts: Pt[] = stroke.map(([gx, gy]) => [px0 + gx * scale, yTop + gy * scale]);
-          if (pts.length === 1) disc(pts[0][0], pts[0][1], strokeW / 2, c);
-          else polyline(pts, strokeW, c);
-        }
+  if (opts.align === "center") cx = x - w / 2;
+  if (opts.align === "right") cx = x - w;
+  const bold = opts.bold ?? false;
+  const strokeW = bold ? 1.3 * u : 1.0 * u;
+  const passes = bold ? [0, 0.45 * u] : [0];
+  for (const ch of s) {
+    const g = GLYPHS[ch] ?? GLYPHS[" "];
+    for (const off of passes) {
+      for (const stroke of g[1]) {
+        const pts: [number, number][] = stroke.map(([gx, gy]) => [cx + off + gx * u, yTop + gy * u]);
+        polyline(pts, strokeW, c);
       }
-      px0 += ADVANCE * scale;
+    }
+    cx += (g[0] + 1 + tracking) * u;
+  }
+}
+
+// ----------------------------------------------------------------- globe ----
+// Rough continent outlines as [longitude, latitude] polygons, drawn by hand
+// from a world map in memory. Orthographic projection centred on lon 12, lat 24.
+const CONTINENTS: number[][][] = [
+  // North America
+  [[-168, 66], [-165, 60], [-158, 58], [-152, 60], [-140, 60], [-135, 58], [-130, 54], [-125, 49], [-124, 42], [-120, 34], [-114, 29], [-110, 24], [-105, 20], [-97, 16], [-94, 17], [-90, 14], [-86, 12], [-83, 9], [-79, 9], [-80, 13], [-84, 16], [-87, 21], [-90, 21], [-91, 19], [-96, 19], [-97, 26], [-93, 30], [-89, 30], [-84, 30], [-81, 25], [-80, 32], [-76, 35], [-74, 39], [-70, 42], [-68, 45], [-65, 44], [-60, 47], [-55, 47], [-60, 52], [-64, 58], [-68, 58], [-72, 62], [-78, 62], [-85, 66], [-92, 66], [-95, 69], [-110, 68], [-125, 70], [-140, 70], [-155, 71], [-165, 68]],
+  // South America
+  [[-79, 9], [-77, 4], [-80, -3], [-81, -6], [-77, -12], [-72, -18], [-70, -23], [-70, -30], [-72, -37], [-73, -44], [-74, -50], [-70, -54], [-66, -55], [-68, -50], [-65, -45], [-62, -41], [-58, -35], [-52, -32], [-48, -28], [-41, -23], [-39, -17], [-35, -9], [-35, -6], [-40, -3], [-44, -2], [-50, 0], [-52, 4], [-55, 6], [-60, 8], [-62, 10], [-68, 11], [-72, 12], [-76, 10]],
+  // Africa
+  [[-17, 15], [-16, 20], [-15, 27], [-10, 31], [-6, 35], [0, 36], [10, 37], [11, 34], [20, 32], [30, 31], [32, 31], [34, 28], [35, 23], [37, 18], [39, 15], [43, 12], [48, 11], [51, 12], [48, 10], [44, 5], [41, 0], [40, -5], [40, -10], [38, -15], [36, -20], [33, -26], [28, -33], [20, -35], [17, -32], [15, -27], [13, -18], [12, -12], [13, -6], [9, -1], [9, 4], [4, 6], [-8, 5], [-13, 8], [-17, 12]],
+  // Eurasia
+  [[-10, 36], [-9, 43], [-2, 44], [-1, 46], [-4, 48], [-1, 50], [2, 51], [5, 53], [8, 57], [10, 59], [5, 60], [5, 62], [12, 65], [18, 69], [25, 71], [30, 70], [40, 68], [50, 69], [60, 69], [70, 72], [80, 73], [90, 75], [100, 77], [110, 74], [120, 73], [130, 72], [140, 72], [150, 70], [158, 66], [162, 60], [158, 52], [142, 50], [140, 40], [135, 35], [130, 33], [127, 35], [122, 38], [120, 32], [115, 25], [110, 20], [108, 12], [105, 9], [100, 8], [98, 12], [95, 16], [92, 21], [89, 22], [86, 20], [82, 17], [80, 13], [77, 8], [75, 12], [72, 20], [68, 23], [64, 25], [60, 25], [57, 26], [54, 26], [52, 28], [50, 29], [48, 30], [50, 24], [52, 20], [55, 17], [58, 15], [55, 12], [52, 14], [48, 14], [44, 13], [43, 12], [40, 15], [39, 21], [38, 24], [35, 28], [34, 31], [33, 35], [30, 36], [27, 37], [23, 36], [22, 39], [19, 42], [15, 44], [12, 44], [8, 44], [3, 42], [0, 40], [-2, 37], [-6, 36], [-9, 35]],
+  // Australia
+  [[114, -22], [113, -26], [115, -33], [118, -35], [124, -33], [129, -32], [132, -32], [135, -35], [138, -35], [140, -38], [145, -38], [150, -37], [153, -32], [153, -27], [151, -24], [146, -19], [142, -15], [142, -11], [137, -12], [135, -15], [132, -12], [130, -13], [126, -14], [122, -17], [118, -20]],
+  // Greenland
+  [[-58, 64], [-55, 70], [-50, 74], [-40, 76], [-30, 76], [-25, 72], [-32, 68], [-40, 64], [-50, 60], [-55, 60]],
+  // Britain
+  [[-5, 50], [-3, 53], [-5, 56], [-3, 58], [-1, 57], [0, 53], [1, 51]],
+  // Japan
+  [[130, 31], [132, 33], [135, 34], [137, 35], [139, 36], [140, 38], [141, 40], [142, 42], [140, 44], [138, 42], [136, 40], [134, 38], [131, 34]],
+  // New Zealand
+  [[167, -45], [170, -42], [173, -40], [175, -38], [177, -38], [174, -41], [172, -43], [168, -46]],
+];
+
+const LON0 = (12 * Math.PI) / 180;
+const LAT0 = (24 * Math.PI) / 180;
+
+function project3(lon: number, lat: number): [number, number, number] {
+  const la = (lat * Math.PI) / 180;
+  const d = (lon * Math.PI) / 180 - LON0;
+  const x = Math.cos(la) * Math.sin(d);
+  const y = Math.cos(LAT0) * Math.sin(la) - Math.sin(LAT0) * Math.cos(la) * Math.cos(d);
+  const z = Math.sin(LAT0) * Math.sin(la) + Math.cos(LAT0) * Math.cos(la) * Math.cos(d);
+  return [x, y, z];
+}
+
+function clipZ(poly: [number, number, number][], eps: number): [number, number, number][] {
+  const res: [number, number, number][] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const za = a[2] - eps;
+    const zb = b[2] - eps;
+    if (za >= 0 && zb >= 0) {
+      res.push(b);
+    } else if (za >= 0 && zb < 0) {
+      const t = za / (za - zb);
+      res.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]);
+    } else if (za < 0 && zb >= 0) {
+      const t = za / (za - zb);
+      res.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]);
+      res.push(b);
     }
   }
+  return res;
 }
 
-// Shrink the scale until the text fits maxWidth (never below floor).
-function fitScale(text: string, maxWidth: number, start: number, floor = 0.9): number {
-  let s = start;
-  while (s > floor && measure(text, s) > maxWidth) s -= 0.05;
-  return s;
+function drawGlobe(cx: number, cy: number, R: number): void {
+  fillDisc(cx, cy, R, OCEAN);
+  const clip: Clip = { cx, cy, r: R };
+  for (const poly of CONTINENTS) {
+    const pts3 = poly.map(([lo, la]) => project3(lo, la));
+    const kept = clipZ(pts3, 0.03);
+    if (kept.length < 3) continue;
+    const pts2: [number, number][] = kept.map(([x, y]) => [cx + R * x, cy - R * y]);
+    fillPoly(pts2, LAND, clip);
+    // thin dark outline, only where the whole segment lies inside the disc
+    for (let i = 0; i < pts2.length; i++) {
+      const [x1, y1] = pts2[i];
+      const [x2, y2] = pts2[(i + 1) % pts2.length];
+      const d1 = Math.hypot(x1 - cx, y1 - cy);
+      const d2 = Math.hypot(x2 - cx, y2 - cy);
+      if (d1 <= R + 1 && d2 <= R + 1) thickLine(x1, y1, x2, y2, 1.5, LAND_DARK);
+    }
+  }
+  // polar cap: white circular segment at the top of the disc
+  const capY = cy - 0.72 * R;
+  for (let y = Math.ceil(cy - R); y <= Math.floor(capY); y++) {
+    const dy = y - cy;
+    const dx = Math.sqrt(Math.max(0, R * R - dy * dy));
+    fillRect(Math.ceil(cx - dx), y, Math.floor(2 * dx), 1, CAP);
+  }
+  // one small red crack in the ocean, south-east of centre (climate stress)
+  polyline(
+    [
+      [cx + 0.38 * R, cy + 0.3 * R],
+      [cx + 0.46 * R, cy + 0.36 * R],
+      [cx + 0.4 * R, cy + 0.44 * R],
+      [cx + 0.5 * R, cy + 0.5 * R],
+    ],
+    3,
+    RED,
+  );
+  // graticule: meridians and parallels, thin teal lines on the visible face
+  for (let lam = -180; lam < 180; lam += 30) {
+    let prev: [number, number] | null = null;
+    for (let phi = -75; phi <= 75; phi += 3) {
+      const p = project3(lam, phi);
+      if (p[2] > 0.03) {
+        const s: [number, number] = [cx + R * p[0], cy - R * p[1]];
+        if (prev) thickLine(prev[0], prev[1], s[0], s[1], 1.2, GRAT);
+        prev = s;
+      } else {
+        prev = null;
+      }
+    }
+  }
+  for (const phi of [-60, -30, 0, 30, 60]) {
+    let prev: [number, number] | null = null;
+    for (let lam = -180; lam <= 180; lam += 3) {
+      const p = project3(lam, phi);
+      if (p[2] > 0.03) {
+        const s: [number, number] = [cx + R * p[0], cy - R * p[1]];
+        if (prev) thickLine(prev[0], prev[1], s[0], s[1], 1.2, GRAT);
+        prev = s;
+      } else {
+        prev = null;
+      }
+    }
+  }
+  // outline
+  const steps = 360;
+  let prevX = cx + R;
+  let prevY = cy;
+  for (let i = 1; i <= steps; i++) {
+    const a = (i / steps) * Math.PI * 2;
+    const sx = cx + R * Math.cos(a);
+    const sy = cy + R * Math.sin(a);
+    thickLine(prevX, prevY, sx, sy, 3, INK);
+    prevX = sx;
+    prevY = sy;
+  }
 }
 
-// ---------------------------------------------------------------- PNG encoder
+// ------------------------------------------------------- secondary panels ---
+// Each panel is a small scene in a 304x78 box. All coordinates are local.
+
+function drawBahrain(x0: number, y0: number, w: number): void {
+  fillRect(x0, y0, w, 78, [215, 229, 232]);
+  fillRect(x0, y0 + 50, w, 28, SEA);
+  // skyline silhouettes on the far shore
+  const blocks: [number, number, number, number][] = [
+    [10, 32, 26, 18],
+    [42, 24, 18, 26],
+    [66, 36, 30, 14],
+    [102, 28, 16, 22],
+    [196, 30, 24, 20],
+    [226, 22, 20, 28],
+    [252, 34, 28, 16],
+  ];
+  for (const [bx, by, bw, bh] of blocks) fillRect(x0 + bx, y0 + by, bw, bh, DARK);
+  fillRect(x0 + 234, y0 + 14, 2, 8, DARK); // antenna
+  // ONE red dashed arc across the sky: a missile path, nothing else
+  const ax = x0 + 152;
+  const ay = y0 + 50;
+  const rx = 132;
+  const ry = 40;
+  for (let t = 0; t < Math.PI; t += 0.02) {
+    if (t % 0.3 < 0.2) {
+      const px1 = ax + rx * Math.cos(t);
+      const py1 = ay - ry * Math.sin(t);
+      const px2 = ax + rx * Math.cos(t + 0.02);
+      const py2 = ay - ry * Math.sin(t + 0.02);
+      thickLine(px1, py1, px2, py2, 3, RED);
+    }
+  }
+  // burst at the top of the arc
+  const sx = ax;
+  const sy = ay - ry;
+  thickLine(sx - 10, sy, sx + 10, sy, 4, ORANGE);
+  thickLine(sx, sy - 9, sx, sy + 9, 4, ORANGE);
+  fillDisc(sx, sy, 4, RED);
+}
+
+function drawCikande(x0: number, y0: number, w: number): void {
+  fillRect(x0, y0, w, 78, [233, 226, 207]);
+  fillRect(x0, y0 + 62, w, 16, [203, 184, 148]);
+  // factory hall with a sawtooth roof
+  fillPoly(
+    [
+      [x0 + 18, y0 + 62],
+      [x0 + 18, y0 + 30],
+      [x0 + 48, y0 + 12],
+      [x0 + 78, y0 + 30],
+      [x0 + 108, y0 + 12],
+      [x0 + 138, y0 + 30],
+      [x0 + 168, y0 + 12],
+      [x0 + 198, y0 + 30],
+      [x0 + 218, y0 + 30],
+      [x0 + 218, y0 + 62],
+    ],
+    DARK,
+  );
+  // chimney with smoke
+  fillRect(x0 + 232, y0 + 16, 18, 46, DARK);
+  fillDisc(x0 + 241, y0 + 10, 6, SMOKE);
+  fillDisc(x0 + 252, y0 + 6, 5, SMOKE);
+  // flames licking from the roof peaks
+  fillPoly([[x0 + 39, y0 + 16], [x0 + 48, y0 + 1], [x0 + 57, y0 + 16]], ORANGE);
+  fillPoly([[x0 + 130, y0 + 16], [x0 + 138, y0 + 3], [x0 + 146, y0 + 16]], AMBER);
+  fillPoly([[x0 + 161, y0 + 16], [x0 + 168, y0 + 7], [x0 + 175, y0 + 16]], ORANGE);
+  // small pale windows
+  for (const wx of [34, 64, 94, 124, 154, 184]) {
+    fillRect(x0 + wx, y0 + 40, 9, 11, [232, 224, 200]);
+  }
+}
+
+function drawKyiv(x0: number, y0: number, w: number): void {
+  fillRect(x0, y0, w, 78, [221, 229, 232]);
+  fillRect(x0, y0 + 62, w, 16, [185, 179, 164]);
+  // five-storey flat block
+  fillRect(x0 + 24, y0 + 8, 150, 54, DARK2);
+  // windows: some lit, most dark
+  const lit = new Set(["0,0", "0,2", "1,1", "2,0", "2,3", "3,2"]);
+  for (let row = 0; row < 4; row++) {
+    for (let col = 0; col < 4; col++) {
+      const wx = x0 + 36 + col * 30;
+      const wy = y0 + 16 + row * 11;
+      fillRect(wx, wy, 12, 8, lit.has(`${row},${col}`) ? WIN_LIT : WIN_DARK);
+    }
+  }
+  // collapsed fragment on the right, leaning out
+  fillPoly(
+    [
+      [x0 + 186, y0 + 20],
+      [x0 + 212, y0 + 14],
+      [x0 + 220, y0 + 62],
+      [x0 + 186, y0 + 62],
+    ],
+    DARK3,
+  );
+  // rubble at the foot of the fragment, one small flame still burning
+  fillPoly([[x0 + 182, y0 + 62], [x0 + 196, y0 + 48], [x0 + 210, y0 + 62]], RUBBLE);
+  fillPoly([[x0 + 206, y0 + 62], [x0 + 218, y0 + 52], [x0 + 230, y0 + 62]], RUBBLE);
+  fillPoly([[x0 + 196, y0 + 50], [x0 + 202, y0 + 40], [x0 + 208, y0 + 50]], ORANGE);
+  // smoke above the damage
+  fillDisc(x0 + 200, y0 + 8, 7, SMOKE);
+  fillDisc(x0 + 210, y0 + 2, 5, SMOKE);
+  // chunky rescue ladder leaning to a second-floor window
+  const ax = x0 + 60;
+  const ay = y0 + 64;
+  const bx = x0 + 102;
+  const by = y0 + 31;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = Math.hypot(dx, dy);
+  const nx = (-dy / len) * 12;
+  const ny = (dx / len) * 12;
+  thickLine(ax, ay, bx, by, 3.5, LADDER);
+  thickLine(ax + nx, ay + ny, bx + nx, by + ny, 3.5, LADDER);
+  for (const t of [0.25, 0.5, 0.75]) {
+    const rx1 = ax + dx * t;
+    const ry1 = ay + dy * t;
+    thickLine(rx1, ry1, rx1 + nx, ry1 + ny, 3, LADDER);
+  }
+  // small first-aid sign, top right
+  fillRect(x0 + 272, y0 + 6, 18, 18, WHITE);
+  fillRect(x0 + 279, y0 + 9, 4, 12, RED);
+  fillRect(x0 + 274, y0 + 12, 14, 4, RED);
+}
+
+// ------------------------------------------------------------------- png ----
 const CRC_TABLE: number[] = (() => {
-  const t: number[] = [];
+  const table: number[] = [];
   for (let n = 0; n < 256; n++) {
     let c = n;
     for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c >>> 0;
+    table.push(c >>> 0);
   }
-  return t;
+  return table;
 })();
 
-function crc32(b: Buffer): number {
+function crc32(data: Buffer): number {
   let c = 0xffffffff;
-  for (let i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 0xff] ^ (c >>> 8);
+  for (const b of data) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 
@@ -339,364 +551,155 @@ function pngChunk(type: string, data: Buffer): Buffer {
   out.writeUInt32BE(data.length, 0);
   out.write(type, 4, 4, "ascii");
   data.copy(out, 8);
-  out.writeUInt32BE(crc32(Buffer.concat([Buffer.from(type, "ascii"), data])), 8 + data.length);
+  const crc = crc32(Buffer.concat([Buffer.from(type, "ascii"), data]));
+  out.writeUInt32BE(crc, 8 + data.length);
   return out;
 }
 
 function encodePNG(): Buffer {
+  const raw = Buffer.alloc(H * (1 + W * 3));
+  for (let y = 0; y < H; y++) {
+    raw[y * (1 + W * 3)] = 0; // filter: none
+    raw.set(buf.subarray(y * W * 3, (y + 1) * W * 3), y * (1 + W * 3) + 1);
+  }
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(W, 0);
   ihdr.writeUInt32BE(H, 4);
   ihdr[8] = 8; // bit depth
-  ihdr[9] = 2; // colour type RGB
+  ihdr[9] = 2; // colour type: RGB
   ihdr[10] = 0;
   ihdr[11] = 0;
   ihdr[12] = 0;
-  const raw = Buffer.alloc(H * (1 + W * 3));
-  for (let y = 0; y < H; y++) {
-    raw[y * (1 + W * 3)] = 0; // filter: none
-    buf.copy(raw, y * (1 + W * 3) + 1, y * W * 3, (y + 1) * W * 3);
-  }
-  const idat = zlib.deflateSync(raw, { level: 9 });
+  const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    sig,
     pngChunk("IHDR", ihdr),
-    pngChunk("IDAT", idat),
+    pngChunk("IDAT", deflateSync(raw, { level: 9 })),
     pngChunk("IEND", Buffer.alloc(0)),
   ]);
 }
 
-// ---------------------------------------------------------------- dossier
-const DOSSIER = {
-  date: "2026-11-22",
-  title: "THE WORLD — SUNDAY, 22 NOVEMBER 2026",
-  edition: "v2",
-  stories: [
-    {
-      slot: "lead",
-      kicker: "CLIMATE — ANTALYA, TURKEY",
+// ------------------------------------------------------------------ main ----
+const DOSSIER = JSON.stringify(
+  {
+    date: "2026-11-22",
+    title: "THE WORLD — Sunday, 22 November 2026",
+    lead: {
+      kicker: "CLIMATE · ANTALYA, TURKEY",
       headline: "COP31 TALKS SET FOR NO DEAL",
-      facts: [
-        "Antalya summit in a second day of overtime on Sunday 22 Nov 2026.",
-        "Summit president Murat Kurum: no new draft of the deal.",
-        "Draft dropped fossil-fuel wording and a proposed $120bn adaptation-finance target.",
-        "EU climate chief Wopke Hoekstra: 'good deal or no deal'.",
+      lines: [
+        "Antalya summit in second day of overtime",
+        "President: no new draft; fossil-fuel wording dropped",
+        "EU: 'good deal or no deal'; $120bn target dropped",
       ],
-      sources: [
-        "Reuters, 22 Nov 2026 — COP31 climate talks set to collapse without political deal",
-        "Reuters, 21-22 Nov 2026 — COP31 climate summit risks failure as talks go deep into overtime",
-      ],
+      sources: ["Reuters 21-22 Nov 2026"],
     },
-    {
-      slot: "secondary-1",
-      kicker: "BAHRAIN",
-      headline: "IRAN STRIKES US BASES",
-      facts: [
-        "Iran's IRGC claims missile-and-drone strikes on US positions at Al-Riffa and Awali bases, saying it hit two Patriot radars.",
-        "Bahrain says a civilian industrial facility was hit (fire, no injuries) and air defences intercepted other attacks.",
-      ],
-      sources: [
-        "Al Jazeera via ANI, 22 Nov 2026",
-        "Xinhua, 22 Nov 2026",
-        "Iran Press, 22 Nov 2026",
-      ],
-    },
-    {
-      slot: "secondary-2",
-      kicker: "CIKANDE, INDONESIA",
-      headline: "FACTORY FIRE IN CIKANDE",
-      facts: [
-        "Fire broke out Saturday 17:00 local at the PT Fonusa Agung Mulia candy factory.",
-        "3 dead, 36 missing; 15 rescued alive, 4 injured; search under way on Sunday.",
-      ],
-      sources: ["Associated Press, 22 Nov 2026", "Reuters, 22 Nov 2026"],
-    },
-    {
-      slot: "secondary-3",
-      kicker: "KYIV REGION, UKRAINE",
-      headline: "DRONE HITS KYIV FLAT",
-      facts: [
-        "A Russian drone struck a five-storey residential building in Dymer, Kyiv region, on Sunday morning.",
-        "14 people still missing; 9 evacuated, fire contained.",
-      ],
-      sources: ["Reuters, 22 Nov 2026"],
-    },
-  ],
-  briefs: [
-    { text: "NIGERIA: BOAT TO FUNERAL CAPSIZES; 24 DEAD", source: "Reuters, 22 Nov 2026" },
-    { text: "NEPAL PM BALENDRA SHAH ARRIVES IN INDIA", source: "IANS, 22 Nov 2026" },
-    { text: "CRICKET: INDIA 720/9, LEAD NEW ZEALAND BY 352", source: "ESPNcricinfo, 22 Nov 2026" },
-    { text: "F1: VERSTAPPEN WINS LAS VEGAS GRAND PRIX", source: "Reuters, 22 Nov 2026" },
-    { text: "SOUTH AFRICA: FLAGS AT HALF-MAST FOR MLAMBO-NGCUKA", source: "SA News, 22 Nov 2026" },
-    { text: "NATO TO MEET MONDAY OVER MISSILES IN POLAND", source: "EU Today, 22 Nov 2026" },
-  ],
-};
-
-// ---------------------------------------------------------------- illustrations
-// The Earth: blue ocean, green continents in recognisable shapes, white
-// polar cap, thin graticule, and one small red crack (a summit in trouble).
-function drawGlobe(cx: number, cy: number, r: number): void {
-  const rel = (pts: [number, number][]): Pt[] =>
-    pts.map(([dx, dy]) => [cx + dx, cy + dy] as Pt);
-  ellipse(cx, cy, r, r, OCEAN);
-  // Continents — all vertices kept inside the disc (radius < r - 2).
-  fillPolygon(rel([[-62, -38], [-48, -58], [-24, -60], [-8, -46], [-16, -30], [-36, -24], [-52, -28]]), LAND); // N America
-  fillPolygon(rel([[-30, -68], [-18, -70], [-14, -60], [-26, -58]]), LAND); // Greenland
-  fillPolygon(rel([[-30, 2], [-12, -2], [0, 16], [-6, 44], [-20, 52], [-30, 30], [-34, 14]]), LAND); // S America
-  fillPolygon(rel([[14, -34], [38, -40], [52, -22], [48, 2], [34, 18], [22, 10], [14, -8], [8, -24]]), LAND); // Africa
-  fillPolygon(rel([[28, -52], [54, -56], [66, -40], [62, -28], [48, -28], [40, -42]]), LAND); // Eurasia
-  fillPolygon(rel([[48, 34], [64, 36], [64, 46], [50, 50], [44, 40]]), LAND); // Australia
-  // Graticule: equator + one meridian, drawn over the land like a map.
-  polyline(arcPoints(cx, cy, r * 0.97, r * 0.3, 0, Math.PI * 2, 48), 2, TEAL);
-  polyline(arcPoints(cx, cy, r * 0.3, r * 0.97, 0, Math.PI * 2, 48), 2, TEAL);
-  // White polar cap (a modest slice at the top of the disc).
-  const cap = arcPoints(cx, cy, r * 0.995, r * 0.995, (Math.PI * 228) / 180, (Math.PI * 312) / 180, 24);
-  fillPolygon(cap, WHITE);
-  // Ink outline of the disc.
-  polyline(arcPoints(cx, cy, r, r, 0, Math.PI * 2, 72), 3, INK);
-  // One small jagged crack in the lower-right ocean.
-  const crack: Pt[] = rel([[18, 26], [30, 36], [24, 46], [38, 52], [32, 60], [44, 62]]);
-  polyline(crack, 4, RED);
-  fillPolygon(rel([[52, 38], [58, 44], [50, 46]]), RED);
-  fillPolygon(rel([[6, 56], [12, 62], [4, 64]]), RED);
-}
-
-// Bahrain: Manama skyline under a single red missile arc.
-function drawBahrain(x: number, y: number, w: number, h: number): void {
-  fillRect(x, y, x + w, y + h, SKY);
-  // Sea.
-  fillRect(x, y + h * 0.62, x + w, y + h, TEAL);
-  // Skyline (Manama towers).
-  fillRect(x + 18, y + 52, x + 44, y + h * 0.62, DARK);
-  fillRect(x + 52, y + 34, x + 74, y + h * 0.62, DARK);
-  fillRect(x + 82, y + 58, x + 104, y + h * 0.62, DARK);
-  fillRect(x + 210, y + 46, x + 236, y + h * 0.62, DARK);
-  fillRect(x + 244, y + 60, x + 268, y + h * 0.62, DARK);
-  // Twin-tower silhouette.
-  fillPolygon([[x + 120, y + h * 0.62], [x + 128, y + 30], [x + 140, y + 30], [x + 148, y + h * 0.62]], DARK);
-  fillPolygon([[x + 152, y + h * 0.62], [x + 160, y + 30], [x + 172, y + 30], [x + 180, y + h * 0.62]], DARK);
-  // ONE missile arc (red, dashed by segments).
-  const arc = arcPoints(x + 150, y + 82, 95, 52, Math.PI * 1.08, Math.PI * 1.92, 24);
-  for (let i = 0; i + 1 < arc.length; i += 2) {
-    thickLine(arc[i][0], arc[i][1], arc[i + 1][0], arc[i + 1][1], 3.5, RED);
-  }
-  // Burst where the arc lands.
-  const bx = x + 178;
-  const by = y + 30;
-  fillPolygon(
-    [
-      [bx, by - 16], [bx + 5, by - 5], [bx + 16, by - 4], [bx + 7, by + 3],
-      [bx + 10, by + 14], [bx, by + 7], [bx - 10, by + 14], [bx - 7, by + 3],
-      [bx - 16, by - 4], [bx - 5, by - 5],
+    secondary: [
+      {
+        place: "BAHRAIN",
+        headline: "IRAN STRIKES US BASES",
+        lines: ["Tehran claims", "Patriot radars hit"],
+        sources: ["Al Jazeera via ANI", "Xinhua"],
+      },
+      {
+        place: "CIKANDE",
+        headline: "FACTORY FIRE IN CIKANDE",
+        lines: ["3 dead, 36 missing", "Search goes on"],
+        sources: ["AP", "Reuters"],
+      },
+      {
+        place: "KYIV REGION",
+        headline: "DRONE HITS KYIV FLAT",
+        lines: ["14 still missing", "9 evacuated"],
+        sources: ["Reuters"],
+      },
     ],
-    ORANGE,
-  );
-  disc(bx, by, 6, RED);
-}
-
-// Cikande: candy factory with sawtooth roof, flames and smoke.
-function drawCikande(x: number, y: number, w: number, h: number): void {
-  fillRect(x, y, x + w, y + h, SKY);
-  // Factory block with sawtooth roof.
-  fillRect(x + 20, y + 58, x + w - 24, y + h, DARK);
-  fillPolygon(
-    [
-      [x + 20, y + 58], [x + 70, y + 34], [x + 120, y + 58], [x + 170, y + 34],
-      [x + 220, y + 58], [x + w - 24, y + 58],
+    briefs: [
+      "NIGERIA: BOAT TO FUNERAL CAPSIZES; 24 DEAD",
+      "NEPAL: PM BALENDRA SHAH ARRIVES IN INDIA",
+      "CRICKET: INDIA 720/9, LEAD NEW ZEALAND BY 352",
+      "F1: VERSTAPPEN WINS LAS VEGAS GRAND PRIX",
+      "SOUTH AFRICA: FLAGS AT HALF-MAST FOR MLAMBO-NGCUKA",
+      "NATO TO MEET MONDAY OVER MISSILES IN POLAND",
     ],
-    DARK,
-  );
-  // Chimney.
-  fillRect(x + w - 66, y + 18, x + w - 44, y + 58, DARK);
-  // Windows (paper dots).
-  for (let i = 0; i < 5; i++) {
-    fillRect(x + 36 + i * 44, y + 74, x + 52 + i * 44, y + 88, PAPER);
-  }
-  // Flames at the roofline.
-  fillPolygon([[x + 90, y + 58], [x + 104, y + 30], [x + 118, y + 58]], ORANGE);
-  fillPolygon([[x + 112, y + 58], [x + 122, y + 40], [x + 134, y + 58]], RED);
-  fillPolygon([[x + 150, y + 58], [x + 162, y + 36], [x + 176, y + 58]], ORANGE);
-  // Smoke plume.
-  ellipse(x + 108, y + 22, 16, 12, SMOKE);
-  ellipse(x + 128, y + 8, 20, 13, SMOKE_DARK);
-  ellipse(x + 156, y + 2, 14, 10, SMOKE);
-  ellipse(x + 190, y + 10, 18, 12, SMOKE);
-}
+    sources: ["Reuters", "AP", "Al Jazeera", "Xinhua", "IANS", "ESPNcricinfo", "SA News", "EU Today"],
+    program: "main.ts — Node 22 stdlib only, no network, deterministic",
+  },
+  null,
+  2,
+) + "\n";
 
-// Dymer, Kyiv region: a five-storey block with a collapsed middle section,
-// smoke, a rescue ladder and a small aid marker.
-function drawKyiv(x: number, y: number, w: number, h: number): void {
-  fillRect(x, y, x + w, y + h, SKY);
-  // Intact block on the left.
-  fillRect(x + 14, y + 40, x + 106, y + h, DARK);
-  for (let r = 0; r < 4; r++) {
-    for (let c = 0; c < 3; c++) {
-      fillRect(x + 26 + c * 28, y + 50 + r * 14, x + 36 + c * 28, y + 58 + r * 14, PAPER);
-    }
-  }
-  // Damaged block in the middle: two standing parts, jagged gap, rubble.
-  fillPolygon(
-    [
-      [x + 118, y + 34], [x + 150, y + 34], [x + 150, y + h], [x + 118, y + h],
-    ],
-    DARK,
-  );
-  fillPolygon(
-    [
-      [x + 170, y + 38], [x + 198, y + 38], [x + 198, y + h], [x + 170, y + h],
-    ],
-    DARK,
-  );
-  // Exposed floor slabs inside the gap.
-  thickLine(x + 152, y + 56, x + 168, y + 56, 3, DARK);
-  thickLine(x + 152, y + 76, x + 168, y + 76, 3, DARK);
-  // Rubble mound at the foot of the gap.
-  fillPolygon(
-    [
-      [x + 146, y + h], [x + 152, y + 88], [x + 160, y + 96], [x + 168, y + 88],
-      [x + 174, y + h],
-    ],
-    SMOKE_DARK,
-  );
-  // Windows on the standing parts.
-  fillRect(x + 126, y + 44, x + 136, y + 54, PAPER);
-  fillRect(x + 126, y + 66, x + 136, y + 76, PAPER);
-  fillRect(x + 178, y + 48, x + 188, y + 58, PAPER);
-  fillRect(x + 178, y + 70, x + 188, y + 80, PAPER);
-  // Intact block on the right.
-  fillRect(x + 208, y + 52, x + 290, y + h, DARK);
-  for (let r = 0; r < 3; r++) {
-    for (let c = 0; c < 3; c++) {
-      fillRect(x + 220 + c * 24, y + 62 + r * 14, x + 230 + c * 24, y + 70 + r * 14, PAPER);
-    }
-  }
-  // Smoke column rising from the gap.
-  ellipse(x + 158, y + 24, 14, 10, SMOKE_DARK);
-  ellipse(x + 172, y + 10, 18, 11, SMOKE);
-  ellipse(x + 192, y + 2, 12, 8, SMOKE_DARK);
-  // Rescue ladder leaning into the gap.
-  thickLine(x + 118, y + h, x + 152, y + 62, 2.5, INK);
-  thickLine(x + 126, y + h, x + 160, y + 62, 2.5, INK);
-  for (let i = 0; i < 4; i++) {
-    const t = 0.2 + i * 0.2;
-    thickLine(x + 118 + 34 * t, y + h - (y + h - 62) * t, x + 126 + 34 * t, y + h - (y + h - 62) * t, 2, INK);
-  }
-  // Small aid marker (white square, red cross).
-  fillRect(x + 246, y + 12, x + 268, y + 34, WHITE);
-  fillRect(x + 255, y + 16, x + 259, y + 30, RED);
-  fillRect(x + 250, y + 21, x + 264, y + 25, RED);
-}
-
-// ---------------------------------------------------------------- layout
-function rule(y: number, weight: number, c: RGB = INK): void {
-  fillRect(30, y, W - 30, y + weight, c);
-}
-
-function draw(): void {
+function main(): void {
   fillRect(0, 0, W, H, PAPER);
 
-  // ---- masthead (bold so it survives the 300 px thumbnail)
-  const mastScale = fitScale("THE WORLD", 700, 6.6, 5.5);
-  drawText("THE WORLD", W / 2, 28, mastScale, INK, "center", 1.7);
-  rule(132, 2);
-  rule(138, 5);
-  drawText("SUNDAY, 22 NOVEMBER 2026", 30, 148, 1.7, INK, "left", 1.3);
-  drawText("IN ONE IMAGE", W - 30, 148, 1.7, RED, "right", 1.3);
-  rule(172, 2);
+  // Masthead
+  drawText("THE WORLD", W / 2, 12, 104, INK, { align: "center", bold: true, tracking: 0.6 });
+  fillRect(36, 128, 952, 3, INK);
+  fillRect(36, 135, 952, 1, INK);
+  drawText("SUNDAY, 22 NOVEMBER 2026", 36, 142, 22, INK, { bold: true });
+  drawText("IN ONE IMAGE", 988, 142, 22, RED, { align: "right", bold: true });
+  fillRect(36, 170, 952, 1, INK);
+  drawText("CLIMATE · ANTALYA, TURKEY", 36, 178, 22, RED, { bold: true });
 
-  // ---- lead story: COP31
-  drawText("CLIMATE \u00b7 ANTALYA, TURKEY", 30, 180, 1.7, RED, "left", 1.35);
-  drawGlobe(W / 2, 289, 82);
-  const hl = fitScale("SET FOR NO DEAL", 964, 4.6, 3.5);
-  drawText("COP31 TALKS", W / 2, 378, hl, INK, "center", 1.6);
-  drawText("SET FOR NO DEAL", W / 2, 446, hl, RED, "center", 1.6);
-  const leadLines = [
-    "ANTALYA SUMMIT IN SECOND DAY OF OVERTIME",
-    "PRESIDENT: NO NEW DRAFT; FOSSIL-FUEL WORDING DROPPED",
-    "EU: \u2018GOOD DEAL OR NO DEAL\u2019; $120BN TARGET DROPPED",
-  ];
-  let ly = 516;
-  for (const ln of leadLines) {
-    const s = fitScale(ln, 964, 1.5, 1.2);
-    drawText(ln, W / 2, ly, s, INK, "center", 1.3);
-    ly += 24;
-  }
-  rule(590, 2);
+  // Lead illustration: the Earth, with a small red crack
+  drawGlobe(512, 264, 70);
 
-  // ---- secondary stories (ONE headline scale for all three)
-  const colW = 304;
-  const colX = [30, 360, 690];
-  const secY = 602;
-  const secondaries: {
-    kicker: string;
-    head: [string, string];
-    facts: [string, string];
-    draw: (x: number, y: number, w: number, h: number) => void;
-  }[] = [
-    {
-      kicker: "BAHRAIN",
-      head: ["IRAN STRIKES", "US BASES"],
-      facts: ["TEHRAN CLAIMS", "PATRIOT RADARS HIT"],
-      draw: drawBahrain,
-    },
-    {
-      kicker: "CIKANDE",
-      head: ["FACTORY FIRE", "IN CIKANDE"],
-      facts: ["3 DEAD, 36 MISSING", "SEARCH GOES ON"],
-      draw: drawCikande,
-    },
-    {
-      kicker: "KYIV REGION",
-      head: ["DRONE HITS", "KYIV FLAT"],
-      facts: ["14 STILL MISSING", "9 EVACUATED"],
-      draw: drawKyiv,
-    },
+  // Lead headline + three factual lines
+  drawText("COP31 TALKS", 512, 344, 76, INK, { align: "center", bold: true, tracking: 0.4 });
+  drawText("SET FOR NO DEAL", 512, 426, 76, RED, { align: "center", bold: true, tracking: 0.4 });
+  drawText("ANTALYA SUMMIT IN SECOND DAY OF OVERTIME", 512, 512, 21, INK, { align: "center", bold: true });
+  drawText("PRESIDENT: NO NEW DRAFT; FOSSIL-FUEL WORDING DROPPED", 512, 537, 21, INK, { align: "center", bold: true });
+  drawText("EU: 'GOOD DEAL OR NO DEAL'; $120BN TARGET DROPPED", 512, 562, 21, INK, { align: "center", bold: true });
+
+  fillRect(36, 592, 952, 2, INK);
+
+  // Three secondary stories, one shared headline scale
+  const px = [36, 360, 684];
+  drawBahrain(px[0], 602, 304);
+  drawCikande(px[1], 602, 304);
+  drawKyiv(px[2], 602, 304);
+  const kickers = ["BAHRAIN", "CIKANDE", "KYIV REGION"];
+  const heads: [string, string][] = [
+    ["IRAN STRIKES", "US BASES"],
+    ["FACTORY FIRE", "IN CIKANDE"],
+    ["DRONE HITS", "KYIV FLAT"],
   ];
-  let hs = 1.85;
-  for (const s of secondaries) {
-    hs = Math.min(hs, fitScale(s.head[0], colW, 1.85, 1.4), fitScale(s.head[1], colW, 1.85, 1.4));
-  }
+  const subs: [string, string][] = [
+    ["TEHRAN CLAIMS", "PATRIOT RADARS HIT"],
+    ["3 DEAD, 36 MISSING", "SEARCH GOES ON"],
+    ["14 STILL MISSING", "9 EVACUATED"],
+  ];
   for (let i = 0; i < 3; i++) {
-    const s = secondaries[i];
-    const x = colX[i];
-    s.draw(x, secY, colW, 106);
-    drawText(s.kicker, x, secY + 114, 1.5, RED, "left", 1.35);
-    drawText(s.head[0], x, secY + 140, hs, INK, "left", 1.5);
-    drawText(s.head[1], x, secY + 170, hs, INK, "left", 1.5);
-    const fs = Math.min(fitScale(s.facts[0], colW, 1.45, 1.2), fitScale(s.facts[1], colW, 1.45, 1.2));
-    drawText(s.facts[0], x, secY + 200, fs, INK, "left", 1.25);
-    drawText(s.facts[1], x, secY + 222, fs, INK, "left", 1.25);
+    drawText(kickers[i], px[i], 688, 18, RED, { bold: true });
+    drawText(heads[i][0], px[i], 712, 32, INK, { bold: true });
+    drawText(heads[i][1], px[i], 746, 32, INK, { bold: true });
+    drawText(subs[i][0], px[i], 782, 17, INK, { bold: true });
+    drawText(subs[i][1], px[i], 803, 17, INK, { bold: true });
   }
-  rule(852, 2);
 
-  // ---- footer: IN BRIEF (all 22 Nov 2026)
-  drawText("IN BRIEF", 30, 862, 1.7, RED, "left", 1.35);
-  drawText("SOURCES: REUTERS, AP, AL JAZEERA, IANS", W - 30, 866, 1.1, GREY, "right", 1.15);
+  fillRect(36, 826, 952, 2, INK);
+
+  // Footer: IN BRIEF, six one-line briefs, source line
+  drawText("IN BRIEF", 36, 834, 20, RED, { bold: true });
+  drawText("SOURCES: REUTERS, AP, AL JAZEERA, IANS, SA NEWS", 988, 838, 15, GRAY, { align: "right" });
   const briefs = [
     "NIGERIA: BOAT TO FUNERAL CAPSIZES; 24 DEAD",
-    "NEPAL PM BALENDRA SHAH ARRIVES IN INDIA",
+    "NEPAL: PM BALENDRA SHAH ARRIVES IN INDIA",
     "CRICKET: INDIA 720/9, LEAD NEW ZEALAND BY 352",
     "F1: VERSTAPPEN WINS LAS VEGAS GRAND PRIX",
     "SOUTH AFRICA: FLAGS AT HALF-MAST FOR MLAMBO-NGCUKA",
     "NATO TO MEET MONDAY OVER MISSILES IN POLAND",
   ];
-  let by = 890;
-  for (const b of briefs) {
-    disc(38, by + 7, 3, RED);
-    const s = fitScale(b, 940, 1.42, 1.1);
-    drawText(b, 50, by, s, INK, "left", 1.2);
-    by += 21;
-  }
-}
+  briefs.forEach((b, i) => {
+    const y = 862 + i * 22;
+    fillRect(36, y + 6, 7, 7, RED);
+    drawText(b, 54, y, 17, INK, { bold: true });
+  });
 
-// ---------------------------------------------------------------- main
-function main(): void {
   const outDir = process.env.MAKEFUN_OUTPUT_DIR || "/output";
-  fs.mkdirSync(outDir, { recursive: true });
-  draw();
-  const png = encodePNG();
-  fs.writeFileSync(path.join(outDir, "entry.png"), png);
-  fs.writeFileSync(path.join(outDir, "dossier.json"), JSON.stringify(DOSSIER, null, 2) + "\n");
+  mkdirSync(outDir, { recursive: true });
+  writeFileSync(join(outDir, "entry.png"), encodePNG());
+  writeFileSync(join(outDir, "dossier.json"), DOSSIER);
 }
 
 main();
